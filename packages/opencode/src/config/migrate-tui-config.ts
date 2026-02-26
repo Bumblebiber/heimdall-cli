@@ -3,7 +3,7 @@ import { type ParseError as JsoncParseError, applyEdits, modify, parse as parseJ
 import { mergeDeep, unique } from "remeda"
 import z from "zod"
 import { ConfigPaths } from "./paths"
-import { TuiInfo, TuiOptions } from "./tui-schema"
+import { TuiInfo } from "./tui-schema"
 import { Instance } from "@/project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
@@ -16,14 +16,6 @@ const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
 
 const LegacyTheme = TuiInfo.shape.theme.optional()
 const LegacyRecord = z.record(z.string(), z.unknown()).optional()
-
-const TuiLegacy = z
-  .object({
-    scroll_speed: TuiOptions.shape.scroll_speed.catch(undefined),
-    scroll_acceleration: TuiOptions.shape.scroll_acceleration.catch(undefined),
-    diff_style: TuiOptions.shape.diff_style.catch(undefined),
-  })
-  .strip()
 
 interface MigrateInput {
   directories: string[]
@@ -103,12 +95,11 @@ async function parseLegacyFile(file: string) {
   const theme = LegacyTheme.safeParse("theme" in data ? data.theme : undefined)
   const keybinds = LegacyRecord.safeParse("keybinds" in data ? data.keybinds : undefined)
   const legacyTui = LegacyRecord.safeParse("tui" in data ? data.tui : undefined)
-  const tui = legacyTui.success && legacyTui.data ? normalizeTui(legacyTui.data) : undefined
 
   const legacy: Record<string, unknown> = {}
   if (theme.success && theme.data !== undefined) legacy.theme = theme.data
   if (keybinds.success && keybinds.data !== undefined) legacy.keybinds = keybinds.data
-  if (tui) Object.assign(legacy, tui)
+  if (legacyTui.success && legacyTui.data) Object.assign(legacy, legacyTui.data)
   if (!Object.keys(legacy).length) return
 
   return {
@@ -116,19 +107,6 @@ async function parseLegacyFile(file: string) {
     source,
     legacy,
   }
-}
-
-function normalizeTui(data: Record<string, unknown>) {
-  const parsed = TuiLegacy.safeParse(data)
-  if (!parsed.success) return
-  if (
-    parsed.data.scroll_speed === undefined &&
-    parsed.data.diff_style === undefined &&
-    parsed.data.scroll_acceleration === undefined
-  ) {
-    return
-  }
-  return parsed.data
 }
 
 async function backupAndStripLegacy(file: string, source: string) {

@@ -87,7 +87,11 @@ test("merges legacy tui keys from opencode.jsonc and opencode.json before migrat
         path.join(dir, "opencode.jsonc"),
         `{
   "theme": "from-jsonc",
-  "tui": { "scroll_speed": 2 },
+  "tui": {
+    "scroll_speed": 2,
+    "legacy_alpha": 1,
+    "legacy_nested": { "from_jsonc": true }
+  },
   "keybinds": { "app_exit": "ctrl+q" }
 }`,
       )
@@ -97,6 +101,10 @@ test("merges legacy tui keys from opencode.jsonc and opencode.json before migrat
           {
             theme: "from-json",
             keybinds: { theme_list: "ctrl+k" },
+            tui: {
+              legacy_beta: 2,
+              legacy_nested: { from_json: true },
+            },
           },
           null,
           2,
@@ -118,6 +126,9 @@ test("merges legacy tui keys from opencode.jsonc and opencode.json before migrat
       expect(JSON.parse(text)).toMatchObject({
         theme: "from-json",
         scroll_speed: 2,
+        legacy_alpha: 1,
+        legacy_beta: 2,
+        legacy_nested: { from_jsonc: true, from_json: true },
         keybinds: { app_exit: "ctrl+q", theme_list: "ctrl+k" },
       })
 
@@ -169,7 +180,7 @@ test("migrates project legacy tui keys even when global tui.json already exists"
   })
 })
 
-test("drops unknown legacy tui keys during migration", async () => {
+test("preserves unknown legacy tui keys during migration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -196,7 +207,7 @@ test("drops unknown legacy tui keys during migration", async () => {
       const text = await Filesystem.readText(path.join(tmp.path, "tui.json"))
       const migrated = JSON.parse(text)
       expect(migrated.scroll_speed).toBe(2)
-      expect(migrated.foo).toBeUndefined()
+      expect(migrated.foo).toBe(1)
     },
   })
 })
