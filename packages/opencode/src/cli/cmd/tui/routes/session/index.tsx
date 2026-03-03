@@ -1978,7 +1978,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
     let content = [`Task ${props.input.description}`]
 
     if (isRunning() && tools().length > 0) {
-      content[0] += ` · ${tools().length} toolcalls`
+      // content[0] += ` · ${tools().length} toolcalls`
       if (current()) content.push(`└ ${Locale.titlecase(current()!.tool)} ${(current()!.state as any).title}`)
       else content.push(`└ Running...`)
     }
