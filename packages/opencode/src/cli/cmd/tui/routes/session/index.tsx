@@ -1123,7 +1123,7 @@ export function Session() {
                       <UserMessage
                         index={index()}
                         onMouseUp={() => {
-                          if (renderer.getSelection()?.getSelectedText()) return
+                          if (renderer.hasSelection) return
                           dialog.replace(() => (
                             <DialogMessage
                               messageID={message.id}
@@ -1680,7 +1680,7 @@ function InlineTool(props: {
         }
       }}
       onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
+        if (renderer.hasSelection) return
         props.onClick?.()
       }}
     >
@@ -1728,7 +1728,7 @@ function BlockTool(props: {
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
+        if (renderer.hasSelection) return
         props.onClick?.()
       }}
     >
