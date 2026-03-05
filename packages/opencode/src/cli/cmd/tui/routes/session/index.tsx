@@ -1631,6 +1631,7 @@ function InlineTool(props: {
   const ctx = use()
   const sync = useSync()
   const renderer = useRenderer()
+  const [hover, setHover] = createSignal(false)
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -1679,6 +1680,8 @@ function InlineTool(props: {
           return
         }
       }}
+      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.hasSelection) return
         props.onClick?.()
@@ -1686,10 +1689,14 @@ function InlineTool(props: {
     >
       <Switch>
         <Match when={props.spinner}>
-          <Spinner color={fg()} children={props.children} />
+          <Spinner color={hover() ? theme.text : fg()} children={props.children} />
         </Match>
         <Match when={true}>
-          <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+          <text
+            paddingLeft={3}
+            fg={hover() ? theme.text : fg()}
+            attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}
+          >
             <Show fallback={<>~ {props.pending}</>} when={props.complete}>
               <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
             </Show>
