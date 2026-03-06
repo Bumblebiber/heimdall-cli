@@ -37,41 +37,8 @@ describe("tool.grep", () => {
     })
   })
 
-  test("hashline disabled keeps Line N format", async () => {
+  test("emits hashline anchors by default", async () => {
     await using tmp = await tmpdir({
-      config: {
-        experimental: {
-          hashline_edit: false,
-        },
-      },
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "test.txt"), "alpha\nbeta")
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const grep = await GrepTool.init()
-        const result = await grep.execute(
-          {
-            pattern: "alpha",
-            path: tmp.path,
-          },
-          ctx,
-        )
-        expect(result.output).toContain("Line 1: alpha")
-      },
-    })
-  })
-
-  test("hashline enabled emits N#ID anchor format", async () => {
-    await using tmp = await tmpdir({
-      config: {
-        experimental: {
-          hashline_edit: true,
-        },
-      },
       init: async (dir) => {
         await Bun.write(path.join(dir, "test.txt"), "alpha\nbeta")
       },
@@ -117,10 +84,8 @@ describe("tool.grep", () => {
   })
 
   test("handles CRLF line endings in output", async () => {
-    // This test verifies the regex split handles both \n and \r\n
     await using tmp = await tmpdir({
       init: async (dir) => {
-        // Create a test file with content
         await Bun.write(path.join(dir, "test.txt"), "line1\nline2\nline3")
       },
     })

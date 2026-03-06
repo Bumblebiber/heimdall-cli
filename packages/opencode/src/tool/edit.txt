@@ -1,22 +1,12 @@
-Performs file edits with two supported payload schemas.
+Performs file edits with hashline anchors.
 
 Usage:
 - You must use your `Read` tool at least once before editing an existing file. This tool rejects stale edits when file contents changed since read.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
-
-Legacy schema (always supported):
-- `{ filePath, oldString, newString, replaceAll? }`
-- Exact replacement only.
-- The edit fails if `oldString` is not found.
-- The edit fails if `oldString` matches multiple locations and `replaceAll` is not true.
-- Use `replaceAll: true` for global replacements.
-
-Hashline schema (default behavior):
 - `{ filePath, edits, delete?, rename? }`
-- Do not mix legacy fields (`oldString/newString/replaceAll`) with hashline fields (`edits/delete/rename`) in one call.
+- `edits` is required; use `[]` when only delete or rename is intended.
 - Use strict anchor references from `Read` output: `LINE#ID`.
-- Hashline mode can be turned off with `experimental.hashline_edit: false`.
 - Autocorrect cleanup is on by default and can be turned off with `experimental.hashline_autocorrect: false`.
 - Default autocorrect only strips copied `LINE#ID:`/`>>>` prefixes; set `OPENCODE_HL_AUTOCORRECT=1` to opt into heavier cleanup heuristics.
 - When `Read` returns `LINE#ID:<content>`, prefer hashline operations.
@@ -29,5 +19,5 @@ Hashline schema (default behavior):
   - `append { text }`
   - `prepend { text }`
   - `replace { old_text, new_text, all? }`
-- In hashline mode, provide the exact `LINE#ID` anchors from the latest `Read` result. Mismatched anchors are rejected and should be retried with the returned `retry with` anchors.
-- Fallback guidance: GPT-family models can use `apply_patch` as fallback; non-GPT models should fallback to legacy `oldString/newString` payloads.
+- Provide the exact `LINE#ID` anchors from the latest `Read` result. Mismatched anchors are rejected and should be retried with the returned `retry with` anchors.
+- GPT-family models can use `apply_patch` as fallback when needed.

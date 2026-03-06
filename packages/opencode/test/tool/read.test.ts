@@ -463,29 +463,6 @@ describe("tool.read hashline output", () => {
       },
     })
   })
-
-  test("keeps legacy line prefixes when hashline mode is disabled", async () => {
-    await using tmp = await tmpdir({
-      config: {
-        experimental: {
-          hashline_edit: false,
-        },
-      },
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "legacy.txt"), "foo\nbar")
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "legacy.txt") }, ctx)
-        expect(result.output).toContain("1: foo")
-        expect(result.output).toContain("2: bar")
-      },
-    })
-  })
 })
 
 describe("tool.read loaded instructions", () => {

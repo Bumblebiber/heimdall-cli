@@ -9,7 +9,6 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
-import { Config } from "../config/config"
 import { hashlineRef } from "./hashline"
 
 const MAX_LINE_LENGTH = 2000
@@ -118,7 +117,6 @@ export const GrepTool = Tool.define("grep", {
     }
 
     const totalMatches = matches.length
-    const useHashline = (await Config.get()).experimental?.hashline_edit !== false
     const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
 
     let currentFile = ""
@@ -132,11 +130,7 @@ export const GrepTool = Tool.define("grep", {
       }
       const truncatedLineText =
         match.lineText.length > MAX_LINE_LENGTH ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..." : match.lineText
-      if (useHashline) {
-        outputLines.push(`  ${hashlineRef(match.lineNum, match.lineText)}:${truncatedLineText}`)
-      } else {
-        outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
-      }
+      outputLines.push(`  ${hashlineRef(match.lineNum, match.lineText)}:${truncatedLineText}`)
     }
 
     if (truncated) {
