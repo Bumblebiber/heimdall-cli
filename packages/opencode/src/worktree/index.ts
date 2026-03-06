@@ -476,6 +476,11 @@ export namespace Worktree {
           throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
         })
 
+    const stop = async (target: string) => {
+      if (!(await exists(target))) return
+      await git(["fsmonitor--daemon", "stop"], { cwd: target })
+    }
+
     const list = await git(["worktree", "list", "--porcelain"], { cwd: Instance.worktree })
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
@@ -486,11 +491,13 @@ export namespace Worktree {
     if (!entry?.path) {
       const directoryExists = await exists(directory)
       if (directoryExists) {
+        await stop(directory)
         await clean(directory)
       }
       return true
     }
 
+    await stop(entry.path)
     const removed = await git(["worktree", "remove", "--force", entry.path], {
       cwd: Instance.worktree,
     })
@@ -646,7 +653,7 @@ export namespace Worktree {
       throw new ResetFailedError({ message: errorText(subClean) || "Failed to clean submodules" })
     }
 
-    const status = await git(["status", "--porcelain=v1"], { cwd: worktreePath })
+    const status = await git(["-c", "core.fsmonitor=false", "status", "--porcelain=v1"], { cwd: worktreePath })
     if (status.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(status) || "Failed to read git status" })
     }
