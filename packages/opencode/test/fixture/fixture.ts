@@ -60,8 +60,8 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
       try {
         await options?.dispose?.(realpath)
       } finally {
-        if (options?.git) await stop(realpath)
-        await clean(realpath)
+        if (options?.git) await stop(realpath).catch(() => undefined)
+        await clean(realpath).catch(() => undefined)
       }
     },
     path: realpath,
