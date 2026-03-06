@@ -188,9 +188,14 @@ export namespace Installation {
             result = tap
             break
           }
-          const repo = (await Process.text(["brew", "--repo", "anomalyco/tap"], { env, nothrow: true })).text.trim()
-          if (repo) {
-            const pull = await Process.run(["git", "pull", "--ff-only"], { cwd: repo, env, nothrow: true })
+          const repo = await Process.text(["brew", "--repo", "anomalyco/tap"], { env, nothrow: true })
+          if (repo.code !== 0) {
+            result = repo
+            break
+          }
+          const dir = repo.text.trim()
+          if (dir) {
+            const pull = await Process.run(["git", "pull", "--ff-only"], { cwd: dir, env, nothrow: true })
             if (pull.code !== 0) {
               result = pull
               break
