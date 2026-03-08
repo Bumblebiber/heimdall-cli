@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -182,16 +183,18 @@ export function Session() {
     return new CustomSpeedScroll(3)
   })
 
-  createEffect(async () => {
-    await sync.session
-      .sync(route.sessionID)
+  createEffect(() => {
+    const sessionID = route.sessionID
+    if (sync.session.synced(sessionID)) return
+    void sync.session
+      .sync(sessionID)
       .then(() => {
         if (scroll) scroll.scrollBy(100_000)
       })
       .catch((e) => {
         console.error(e)
         toast.show({
-          message: `Session not found: ${route.sessionID}`,
+          message: `Session not found: ${sessionID}`,
           variant: "error",
         })
         return navigate({ type: "home" })
@@ -209,7 +212,7 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  sdk.event.on("message.part.updated", (evt) => {
+  const unsub = sdk.event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
     if (part.type !== "tool") return
     if (part.sessionID !== route.sessionID) return
@@ -224,6 +227,7 @@ export function Session() {
       lastSwitch = part.id
     }
   })
+  onCleanup(unsub)
 
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
@@ -1959,9 +1963,11 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const local = useLocal()
   const sync = useSync()
 
-  onMount(() => {
-    if (props.metadata.sessionId && !sync.data.message[props.metadata.sessionId]?.length)
-      sync.session.sync(props.metadata.sessionId)
+  createEffect(() => {
+    const sessionID = props.metadata.sessionId
+    if (!sessionID) return
+    if (sync.session.synced(sessionID)) return
+    void sync.session.sync(sessionID)
   })
 
   const messages = createMemo(() => sync.data.message[props.metadata.sessionId ?? ""] ?? [])

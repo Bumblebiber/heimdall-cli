@@ -25,9 +25,10 @@ import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
+import { dropSessionCache, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./sync-cache"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -103,14 +104,45 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    const cachedSessions = new Set<string>()
+    const fullSyncedSessions = new Set<string>()
+    const inflight = new Map<string, Promise<void>>()
 
-    sdk.event.listen((e) => {
+    const touchSession = (sessionID: string) => {
+      const stale = pickSessionCacheEvictions({
+        seen: cachedSessions,
+        keep: sessionID,
+        limit: SESSION_CACHE_LIMIT,
+      })
+      if (stale.length === 0) return
+      setStore(
+        produce((draft) => {
+          for (const id of stale) {
+            dropSessionCache(draft, id)
+            fullSyncedSessions.delete(id)
+          }
+        }),
+      )
+    }
+
+    const sessionForMessage = (messageID: string) => {
+      const parts = store.part[messageID]
+      const sessionID = parts?.find((part) => !!part?.sessionID)?.sessionID
+      if (sessionID) return sessionID
+      for (const [id, messages] of Object.entries(store.message)) {
+        if (messages?.some((message) => message.id === messageID)) return id
+      }
+      return undefined
+    }
+
+    const stop = sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
         case "server.instance.disposed":
           bootstrap()
           break
         case "permission.replied": {
+          touchSession(event.properties.sessionID)
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
@@ -127,6 +159,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "permission.asked": {
           const request = event.properties
+          touchSession(request.sessionID)
           const requests = store.permission[request.sessionID]
           if (!requests) {
             setStore("permission", request.sessionID, [request])
@@ -149,6 +182,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "question.replied":
         case "question.rejected": {
+          touchSession(event.properties.sessionID)
           const requests = store.question[event.properties.sessionID]
           if (!requests) break
           const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
@@ -165,6 +199,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "question.asked": {
           const request = event.properties
+          touchSession(request.sessionID)
           const requests = store.question[request.sessionID]
           if (!requests) {
             setStore("question", request.sessionID, [request])
@@ -186,46 +221,64 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "todo.updated":
+          touchSession(event.properties.sessionID)
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
 
         case "session.diff":
+          touchSession(event.properties.sessionID)
           setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break
 
         case "session.deleted": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
-          if (result.found) {
-            setStore(
-              "session",
-              produce((draft) => {
-                draft.splice(result.index, 1)
-              }),
-            )
-          }
+          const sessionID = event.properties.info.id
+          setStore(
+            produce((draft) => {
+              const result = Binary.search(draft.session, sessionID, (s) => s.id)
+              if (result.found) draft.session.splice(result.index, 1)
+              dropSessionCache(draft, sessionID)
+            }),
+          )
+          cachedSessions.delete(sessionID)
+          fullSyncedSessions.delete(sessionID)
           break
         }
         case "session.updated": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          const info = event.properties.info
+          if (info.time.archived) {
+            setStore(
+              produce((draft) => {
+                const result = Binary.search(draft.session, info.id, (s) => s.id)
+                if (result.found) draft.session.splice(result.index, 1)
+                dropSessionCache(draft, info.id)
+              }),
+            )
+            cachedSessions.delete(info.id)
+            fullSyncedSessions.delete(info.id)
+            break
+          }
+          const result = Binary.search(store.session, info.id, (s) => s.id)
           if (result.found) {
-            setStore("session", result.index, reconcile(event.properties.info))
+            setStore("session", result.index, reconcile(info))
             break
           }
           setStore(
             "session",
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.info)
+              draft.splice(result.index, 0, info)
             }),
           )
           break
         }
 
         case "session.status": {
+          touchSession(event.properties.sessionID)
           setStore("session_status", event.properties.sessionID, event.properties.status)
           break
         }
 
         case "message.updated": {
+          touchSession(event.properties.info.sessionID)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
             setStore("message", event.properties.info.sessionID, [event.properties.info])
@@ -265,20 +318,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.removed": {
-          const messages = store.message[event.properties.sessionID]
-          const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
-          if (result.found) {
-            setStore(
-              "message",
-              event.properties.sessionID,
-              produce((draft) => {
-                draft.splice(result.index, 1)
-              }),
-            )
-          }
+          touchSession(event.properties.sessionID)
+          setStore(
+            produce((draft) => {
+              const list = draft.message[event.properties.sessionID]
+              if (list) {
+                const next = Binary.search(list, event.properties.messageID, (m) => m.id)
+                if (next.found) list.splice(next.index, 1)
+              }
+              delete draft.part[event.properties.messageID]
+            }),
+          )
           break
         }
         case "message.part.updated": {
+          touchSession(event.properties.part.sessionID)
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -300,6 +354,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.delta": {
+          const sessionID = sessionForMessage(event.properties.messageID)
+          if (sessionID) touchSession(sessionID)
           const parts = store.part[event.properties.messageID]
           if (!parts) break
           const result = Binary.search(parts, event.properties.partID, (p) => p.id)
@@ -318,14 +374,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.part.removed": {
+          const sessionID = sessionForMessage(event.properties.messageID)
+          if (sessionID) touchSession(sessionID)
           const parts = store.part[event.properties.messageID]
-          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
-          if (result.found)
+          if (parts)
             setStore(
-              "part",
-              event.properties.messageID,
               produce((draft) => {
-                draft.splice(result.index, 1)
+                const list = draft.part[event.properties.messageID]
+                if (!list) return
+                const next = Binary.search(list, event.properties.partID, (p) => p.id)
+                if (!next.found) return
+                list.splice(next.index, 1)
+                if (list.length === 0) delete draft.part[event.properties.messageID]
               }),
             )
           break
@@ -342,6 +402,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
       }
     })
+    onCleanup(stop)
 
     const exit = useExit()
     const args = useArgs()
@@ -431,7 +492,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
-    const fullSyncedSessions = new Set<string>()
     const result = {
       data: store,
       set: setStore,
@@ -447,6 +507,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (match.found) return store.session[match.index]
           return undefined
         },
+        synced(sessionID: string) {
+          return fullSyncedSessions.has(sessionID) && store.message[sessionID] !== undefined
+        },
         status(sessionID: string) {
           const session = result.session.get(sessionID)
           if (!session) return "idle"
@@ -458,27 +521,39 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
+          touchSession(sessionID)
+          if (fullSyncedSessions.has(sessionID) && store.message[sessionID] !== undefined) return
+          const existing = inflight.get(sessionID)
+          if (existing) return existing
+          const task = Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100 }),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
-          setStore(
-            produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
-              draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
-                draft.part[message.info.id] = message.parts
-              }
-              draft.session_diff[sessionID] = diff.data ?? []
-            }),
-          )
-          fullSyncedSessions.add(sessionID)
+            .then(([session, messages, todo, diff]) => {
+              if (!cachedSessions.has(sessionID)) return
+              cachedSessions.add(sessionID)
+              fullSyncedSessions.add(sessionID)
+              setStore(
+                produce((draft) => {
+                  const match = Binary.search(draft.session, sessionID, (s) => s.id)
+                  if (match.found) draft.session[match.index] = session.data!
+                  if (!match.found) draft.session.splice(match.index, 0, session.data!)
+                  draft.todo[sessionID] = todo.data ?? []
+                  draft.message[sessionID] = messages.data!.map((x) => x.info)
+                  for (const message of messages.data!) {
+                    draft.part[message.info.id] = message.parts
+                  }
+                  draft.session_diff[sessionID] = diff.data ?? []
+                }),
+              )
+            })
+            .finally(() => {
+              if (inflight.get(sessionID) === task) inflight.delete(sessionID)
+            })
+          inflight.set(sessionID, task)
+          return task
         },
       },
       bootstrap,
