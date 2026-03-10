@@ -117,14 +117,6 @@ export namespace Provider {
     options?: Record<string, any>
   }>
 
-  const byShape = (sdk: any, model: Model) => {
-    const shape = model.api.shape
-    if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(model.api.id)
-    if (shape === "responses") return sdk.responses(model.api.id)
-    if (shape === "completions") return sdk.chat(model.api.id)
-    return undefined
-  }
-
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
       return {
@@ -163,7 +155,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, model: Model, _options?: Record<string, any>) {
-          if (model.api.shape === "completions") return sdk.chat(model.api.id)
           return sdk.responses(model.api.id)
         },
         options: {},
@@ -173,8 +164,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, model: Model, _options?: Record<string, any>) {
-          const m = byShape(sdk, model)
-          if (m) return m
           return shouldUseCopilotResponsesApi(model.api.id) ? sdk.responses(model.api.id) : sdk.chat(model.api.id)
         },
         options: {},
@@ -184,8 +173,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, model: Model, _options?: Record<string, any>) {
-          const m = byShape(sdk, model)
-          if (m) return m
           return shouldUseCopilotResponsesApi(model.api.id) ? sdk.responses(model.api.id) : sdk.chat(model.api.id)
         },
         options: {},
@@ -195,8 +182,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, model: Model, options?: Record<string, any>) {
-          const m = byShape(sdk, model)
-          if (m) return m
           if (options?.["useCompletionUrls"]) return sdk.chat(model.api.id)
           return sdk.responses(model.api.id)
         },
@@ -208,8 +193,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, model: Model, options?: Record<string, any>) {
-          const m = byShape(sdk, model)
-          if (m) return m
           if (options?.["useCompletionUrls"]) return sdk.chat(model.api.id)
           return sdk.responses(model.api.id)
         },
@@ -1212,9 +1195,20 @@ export namespace Provider {
     const sdk = await getSDK(model)
 
     try {
-      const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model, provider.options)
-        : sdk.languageModel(model.api.id)
+      const language = await iife(async () => {
+        // SDK the type doesn't have .responses or .chat on it, but it CAN when using certain npm packages
+        const looselyTyped = sdk as any
+        if (looselyTyped.responses !== undefined || looselyTyped.chat !== undefined) {
+          if (model.api.shape === "responses") return looselyTyped.responses(model.api.id)
+          if (model.api.shape === "completions") return looselyTyped.chat(model.api.id)
+        }
+
+        const ml = s.modelLoaders[model.providerID]
+        if (ml) {
+          return await ml(sdk, model, provider.options)
+        }
+        return sdk.languageModel(model.api.id)
+      })
       s.models.set(key, language)
       return language
     } catch (e) {
