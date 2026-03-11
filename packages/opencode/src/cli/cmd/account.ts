@@ -11,7 +11,7 @@ const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => 
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
 
-export const isActiveOrgChoice = (
+const isActiveOrgChoice = (
   active: Option.Option<{ id: AccountID; active_org_id: OrgID | null }>,
   choice: { accountID: AccountID; orgID: OrgID },
 ) => Option.isSome(active) && active.value.id === choice.accountID && active.value.active_org_id === choice.orgID
