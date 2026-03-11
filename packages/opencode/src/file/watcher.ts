@@ -48,7 +48,6 @@ export namespace FileWatcher {
   const state = Instance.state(
     async () => {
       log.info("init")
-      const dir = Instance.directory
       const cfg = await Config.get()
       const backend = (() => {
         if (process.platform === "win32") return "windows"
@@ -66,13 +65,11 @@ export namespace FileWatcher {
 
       const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
         if (err) return
-        void Instance.run(dir, () => {
-          for (const evt of evts) {
-            if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
-            if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
-            if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
-          }
-        })
+        for (const evt of evts) {
+          if (evt.type === "create") Bus.publish(Event.Updated, { file: evt.path, event: "add" })
+          if (evt.type === "update") Bus.publish(Event.Updated, { file: evt.path, event: "change" })
+          if (evt.type === "delete") Bus.publish(Event.Updated, { file: evt.path, event: "unlink" })
+        }
       }
 
       const subs: ParcelWatcher.AsyncSubscription[] = []

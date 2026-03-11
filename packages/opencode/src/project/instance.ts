@@ -79,13 +79,6 @@ export const Instance = {
       return input.fn()
     })
   },
-  async run<R>(directory: string, fn: () => R): Promise<R | undefined> {
-    const existing = cache.get(Filesystem.resolve(directory))
-    if (!existing) return
-    const ctx = await existing.catch(() => undefined)
-    if (!ctx) return
-    return context.provide(ctx, fn)
-  },
   get directory() {
     return context.use().directory
   },

@@ -118,7 +118,6 @@ export namespace Pty {
 
   export async function create(input: CreateInput) {
     const id = Identifier.create("pty", false)
-    const dir = Instance.directory
     const command = input.command || Shell.preferred()
     const args = input.args || []
     if (command.endsWith("sh")) {
@@ -195,13 +194,11 @@ export namespace Pty {
       session.bufferCursor += excess
     })
     ptyProcess.onExit(({ exitCode }) => {
-      void Instance.run(dir, () => {
-        if (session.info.status === "exited") return
-        log.info("session exited", { id, exitCode })
-        session.info.status = "exited"
-        Bus.publish(Event.Exited, { id, exitCode })
-        remove(id)
-      })
+      if (session.info.status === "exited") return
+      log.info("session exited", { id, exitCode })
+      session.info.status = "exited"
+      Bus.publish(Event.Exited, { id, exitCode })
+      remove(id)
     })
     Bus.publish(Event.Created, { info })
     return info

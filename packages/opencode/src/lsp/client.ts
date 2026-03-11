@@ -41,7 +41,6 @@ export namespace LSPClient {
 
   export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
     const l = log.clone().tag("serverID", input.serverID)
-    const dir = Instance.directory
     l.info("starting client")
 
     const connection = createMessageConnection(
@@ -59,7 +58,7 @@ export namespace LSPClient {
       const exists = diagnostics.has(filePath)
       diagnostics.set(filePath, params.diagnostics)
       if (!exists && input.serverID === "typescript") return
-      void Instance.run(dir, () => Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID }))
+      Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
     connection.onRequest("window/workDoneProgress/create", (params) => {
       l.info("window/workDoneProgress/create", params)
