@@ -119,7 +119,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const messageID = Identifier.ascending("message")
 
       function cancel() {
-        SessionPrompt.cancel(session.id)
+        SessionPrompt.cancel(session.id, "aborted")
       }
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))

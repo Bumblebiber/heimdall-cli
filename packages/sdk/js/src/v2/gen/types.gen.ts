@@ -581,6 +581,7 @@ export type EventPermissionReplied = {
 export type SessionStatus =
   | {
       type: "idle"
+      reason?: "completed" | "aborted" | "error"
     }
   | {
       type: "retry"

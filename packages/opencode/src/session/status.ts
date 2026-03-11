@@ -4,10 +4,14 @@ import { Instance } from "@/project/instance"
 import z from "zod"
 
 export namespace SessionStatus {
+  export const IdleReason = z.enum(["completed", "aborted", "error"])
+  export type IdleReason = z.infer<typeof IdleReason>
+
   export const Info = z
     .union([
       z.object({
         type: z.literal("idle"),
+        reason: IdleReason.optional(),
       }),
       z.object({
         type: z.literal("retry"),
@@ -65,9 +69,11 @@ export namespace SessionStatus {
     })
     if (status.type === "idle") {
       // deprecated
-      Bus.publish(Event.Idle, {
-        sessionID,
-      })
+      if (!status.reason || status.reason === "completed") {
+        Bus.publish(Event.Idle, {
+          sessionID,
+        })
+      }
       delete state()[sessionID]
       return
     }
