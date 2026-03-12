@@ -8,6 +8,8 @@ export interface DialogProps extends ParentProps {
   description?: JSXElement
   action?: JSXElement
   size?: "normal" | "large" | "x-large"
+  position?: "center" | "top"
+  style?: ComponentProps<"div">["style"]
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
   fit?: boolean
@@ -21,7 +23,9 @@ export function Dialog(props: DialogProps) {
       data-component="dialog"
       data-fit={props.fit ? true : undefined}
       data-size={props.size || "normal"}
+      data-position={props.position && props.position !== "center" ? props.position : undefined}
       data-transition={props.transition ? true : undefined}
+      style={props.style}
     >
       <div data-slot="dialog-container">
         <Kobalte.Content

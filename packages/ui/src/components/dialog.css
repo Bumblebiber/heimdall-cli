@@ -16,6 +16,11 @@
   justify-content: center;
   pointer-events: none;
 
+  &[data-position="top"] {
+    align-items: flex-start;
+    padding-top: var(--dialog-top, 16px);
+  }
+
   [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
