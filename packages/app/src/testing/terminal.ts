@@ -1,3 +1,5 @@
+import type { ModelProbeState } from "./model-selection"
+
 export const terminalAttr = "data-pty-id"
 
 export type TerminalProbeState = {
@@ -8,6 +10,10 @@ export type TerminalProbeState = {
 
 export type E2EWindow = Window & {
   __opencode_e2e?: {
+    model?: {
+      enabled?: boolean
+      current?: ModelProbeState
+    }
     terminal?: {
       enabled?: boolean
       terminals?: Record<string, TerminalProbeState>

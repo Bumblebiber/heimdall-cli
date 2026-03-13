@@ -23,20 +23,20 @@ describe("syncSessionModel", () => {
           current() {
             return undefined
           },
-          set(value) {
-            calls.push(["agent", value])
+          set(value, options) {
+            calls.push(["agent", value, options])
           },
         },
         model: {
-          set(value) {
-            calls.push(["model", value])
+          set(value, options) {
+            calls.push(["model", value, options])
           },
           current() {
             return { id: "claude-sonnet-4", provider: { id: "anthropic" } }
           },
           variant: {
-            set(value) {
-              calls.push(["variant", value])
+            set(value, options) {
+              calls.push(["variant", value, options])
             },
           },
         },
@@ -45,13 +45,13 @@ describe("syncSessionModel", () => {
     )
 
     expect(calls).toEqual([
-      ["agent", "build"],
-      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
-      ["variant", "high"],
+      ["agent", "build", { restore: true }],
+      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }, { restore: true }],
+      ["variant", "high", { restore: true }],
     ])
   })
 
-  test("skips variant when the model falls back", () => {
+  test("restores the message variant even when the current model differs", () => {
     const calls: unknown[] = []
 
     syncSessionModel(
@@ -60,20 +60,20 @@ describe("syncSessionModel", () => {
           current() {
             return undefined
           },
-          set(value) {
-            calls.push(["agent", value])
+          set(value, options) {
+            calls.push(["agent", value, options])
           },
         },
         model: {
-          set(value) {
-            calls.push(["model", value])
+          set(value, options) {
+            calls.push(["model", value, options])
           },
           current() {
             return { id: "gpt-5", provider: { id: "openai" } }
           },
           variant: {
-            set(value) {
-              calls.push(["variant", value])
+            set(value, options) {
+              calls.push(["variant", value, options])
             },
           },
         },
@@ -82,8 +82,46 @@ describe("syncSessionModel", () => {
     )
 
     expect(calls).toEqual([
-      ["agent", "build"],
-      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }],
+      ["agent", "build", { restore: true }],
+      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }, { restore: true }],
+      ["variant", "high", { restore: true }],
+    ])
+  })
+
+  test("restores an explicit default variant", () => {
+    const calls: unknown[] = []
+
+    syncSessionModel(
+      {
+        agent: {
+          current() {
+            return undefined
+          },
+          set(value, options) {
+            calls.push(["agent", value, options])
+          },
+        },
+        model: {
+          set(value, options) {
+            calls.push(["model", value, options])
+          },
+          current() {
+            return { id: "claude-sonnet-4", provider: { id: "anthropic" } }
+          },
+          variant: {
+            set(value, options) {
+              calls.push(["variant", value, options])
+            },
+          },
+        },
+      },
+      message(),
+    )
+
+    expect(calls).toEqual([
+      ["agent", "build", { restore: true }],
+      ["model", { providerID: "anthropic", modelID: "claude-sonnet-4" }, { restore: true }],
+      ["variant", undefined, { restore: true }],
     ])
   })
 })

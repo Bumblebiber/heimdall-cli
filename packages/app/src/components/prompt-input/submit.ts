@@ -281,6 +281,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const currentModel = local.model.current()
     const currentAgent = local.agent.current()
+    const variant = local.model.variant.current()
     if (!currentModel || !currentAgent) {
       showToast({
         title: language.t("prompt.toast.modelAgentRequired.title"),
@@ -353,6 +354,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         })
       if (session) {
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
+        local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
@@ -370,7 +372,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       providerID: currentModel.provider.id,
     }
     const agent = currentAgent.name
-    const variant = local.model.variant.current()
     const context = prompt.context.items().slice()
     const draft: FollowupDraft = {
       sessionID: session.id,

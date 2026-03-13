@@ -9,10 +9,10 @@ type Local = {
           variant?: string
         }
       | undefined
-    set(name: string | undefined): void
+    set(name: string | undefined, options?: { restore?: boolean }): void
   }
   model: {
-    set(model: UserMessage["model"] | undefined): void
+    set(model: UserMessage["model"] | undefined, options?: { restore?: boolean }): void
     current():
       | {
           id: string
@@ -20,7 +20,7 @@ type Local = {
         }
       | undefined
     variant: {
-      set(value: string | undefined): void
+      set(value: string | undefined, options?: { restore?: boolean }): void
     }
   }
 }
@@ -36,13 +36,8 @@ export const resetSessionModel = (local: Local) => {
 
 export const syncSessionModel = (local: Local, msg: UserMessage) => {
   batch(() => {
-    local.agent.set(msg.agent)
-    local.model.set(msg.model)
+    local.agent.set(msg.agent, { restore: true })
+    local.model.set(msg.model, { restore: true })
+    local.model.variant.set(msg.variant, { restore: true })
   })
-
-  const model = local.model.current()
-  if (!model) return
-  if (model.provider.id !== msg.model.providerID) return
-  if (model.id !== msg.model.modelID) return
-  local.model.variant.set(msg.variant)
 }
