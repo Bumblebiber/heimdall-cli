@@ -15,6 +15,9 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { ToolRegistry } from "../tool/registry"
+import { PermissionNext } from "../permission/next"
+import { type Tool as AITool, tool, jsonSchema } from "ai"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -99,6 +102,52 @@ export namespace SessionCompaction {
     }
   }
 
+  async function resolveCompactionTools(input: {
+    agent: Agent.Info
+    model: Provider.Model
+    sessionID: SessionID
+    messageID: MessageID
+    abort: AbortSignal
+  }) {
+    if (input.agent.name === "compaction") return {} // Default compaction: no tools
+
+    const allTools = await ToolRegistry.tools(
+      { modelID: input.model.id as any, providerID: input.model.providerID },
+      input.agent,
+    )
+
+    const disabled = PermissionNext.disabled(
+      allTools.map((t) => t.id),
+      input.agent.permission,
+    )
+
+    const tools: Record<string, AITool> = {}
+    for (const t of allTools) {
+      if (disabled.has(t.id)) continue
+      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(t.parameters))
+      tools[t.id] = tool({
+        id: t.id as any,
+        description: t.description,
+        inputSchema: jsonSchema(schema as any),
+        execute: async (args) => {
+          const result = await t.execute(args as any, {
+            sessionID: input.sessionID,
+            abort: input.abort,
+            messageID: input.messageID,
+            callID: "",
+            agent: input.agent.name,
+            messages: [],
+            extra: {},
+            metadata: () => {},
+            ask: async () => {},
+          })
+          return result.output
+        },
+      })
+    }
+    return tools
+  }
+
   export async function process(input: {
     parentID: MessageID
     messages: MessageV2.WithParts[]
@@ -129,7 +178,7 @@ export namespace SessionCompaction {
       }
     }
 
-    const agent = await Agent.get("compaction")
+    const agent = (await Agent.get("hmem-compaction")) ?? (await Agent.get("compaction"))!
     const model = agent.model
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
       : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
@@ -139,7 +188,7 @@ export namespace SessionCompaction {
       parentID: input.parentID,
       sessionID: input.sessionID,
       mode: "compaction",
-      agent: "compaction",
+      agent: agent.name,
       variant: userMessage.variant,
       summary: true,
       path: {
@@ -163,6 +212,13 @@ export namespace SessionCompaction {
       assistantMessage: msg,
       sessionID: input.sessionID,
       model,
+      abort: input.abort,
+    })
+    const compactionTools = await resolveCompactionTools({
+      agent,
+      model,
+      sessionID: input.sessionID,
+      messageID: msg.id,
       abort: input.abort,
     })
     // Allow plugins to inject context or replace compaction prompt
@@ -205,7 +261,7 @@ When constructing the summary, try to stick to this template:
       agent,
       abort: input.abort,
       sessionID: input.sessionID,
-      tools: {},
+      tools: compactionTools,
       system: [],
       messages: [
         ...MessageV2.toModelMessages(messages, model, { stripMedia: true }),
