@@ -12,6 +12,7 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_HMEM_COMPACTION from "./prompt/hmem-compaction.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
@@ -165,6 +166,27 @@ export namespace Agent {
           defaults,
           PermissionNext.fromConfig({
             "*": "deny",
+          }),
+          user,
+        ),
+        options: {},
+      },
+      "hmem-compaction": {
+        name: "hmem-compaction",
+        mode: "primary",
+        native: true,
+        hidden: true,
+        prompt: PROMPT_HMEM_COMPACTION,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+            hmem_list: "allow",
+            hmem_read: "allow",
+            hmem_write: "allow",
+            hmem_append: "allow",
+            hmem_search: "allow",
+            hmem_tag: "allow",
           }),
           user,
         ),
