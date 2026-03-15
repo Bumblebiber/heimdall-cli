@@ -1,4 +1,5 @@
 import fs from "fs"
+import path from "path"
 
 export interface CatalogAgent {
   id: string
@@ -21,6 +22,22 @@ export function loadCatalog(catalogPath: string): CatalogAgent[] {
   } catch {
     return []
   }
+}
+
+export function findCatalog(projectRoot: string): string | null {
+  const candidates = [
+    path.join(projectRoot, ".heimdall", "catalog.json"),
+    path.join(projectRoot, "configs", "catalog.json"),
+  ]
+  for (const candidate of candidates) {
+    try {
+      fs.accessSync(candidate)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+  return null
 }
 
 export function groupByDepartment(agents: CatalogAgent[]): Map<string, CatalogAgent[]> {

@@ -1,6 +1,8 @@
 import { test, expect } from "bun:test"
-import { loadCatalog, groupByDepartment, type CatalogAgent } from "../../src/catalog"
+import { loadCatalog, groupByDepartment, findCatalog, type CatalogAgent } from "../../src/catalog"
 import { join } from "path"
+import { mkdtempSync, mkdirSync, writeFileSync } from "fs"
+import { tmpdir } from "os"
 
 const FIXTURE = join(import.meta.dir, "fixtures", "catalog.json")
 
@@ -32,4 +34,25 @@ test("CatalogAgent without provider/model uses defaults", () => {
   const mimir = agents.find(a => a.id === "MIMIR")!
   expect(mimir.provider).toBeUndefined()
   expect(mimir.model).toBeUndefined()
+})
+
+test("findCatalog returns .heimdall/catalog.json if it exists", () => {
+  const dir = mkdtempSync(join(tmpdir(), "catalog-test-"))
+  const heimdallDir = join(dir, ".heimdall")
+  mkdirSync(heimdallDir)
+  writeFileSync(join(heimdallDir, "catalog.json"), "[]")
+  expect(findCatalog(dir)).toBe(join(heimdallDir, "catalog.json"))
+})
+
+test("findCatalog falls back to configs/catalog.json", () => {
+  const dir = mkdtempSync(join(tmpdir(), "catalog-test-"))
+  const configsDir = join(dir, "configs")
+  mkdirSync(configsDir)
+  writeFileSync(join(configsDir, "catalog.json"), "[]")
+  expect(findCatalog(dir)).toBe(join(configsDir, "catalog.json"))
+})
+
+test("findCatalog returns null if neither exists", () => {
+  const dir = mkdtempSync(join(tmpdir(), "catalog-test-"))
+  expect(findCatalog(dir)).toBeNull()
 })
