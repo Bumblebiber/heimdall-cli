@@ -23,6 +23,8 @@ export namespace Global {
     cache,
     config,
     state,
+    agents: path.join(data, "agents"),
+    sync: path.join(data, "sync"),
   }
 }
 
