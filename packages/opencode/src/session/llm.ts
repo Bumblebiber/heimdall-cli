@@ -22,6 +22,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { Hmem } from "@/hmem"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -78,6 +79,12 @@ export namespace LLM {
         .filter((x) => x)
         .join("\n"),
     )
+
+    // Inject Heimdall memory context — skip for small/hidden utility agents
+    if (!input.small && input.agent.hidden !== true) {
+      const hmemContext = await Hmem.autoRecall(input.agent.name, Instance.directory)
+      if (hmemContext) system.push(hmemContext)
+    }
 
     const header = system[0]
     await Plugin.trigger(
