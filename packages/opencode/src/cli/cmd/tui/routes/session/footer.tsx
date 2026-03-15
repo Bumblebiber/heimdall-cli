@@ -5,11 +5,13 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { useGroupchat } from "../../context/groupchat"
 
 export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
+  const gc = useGroupchat()
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
@@ -49,9 +51,30 @@ export function Footer() {
     })
   })
 
+  const gcParticipantNames = createMemo(() =>
+    gc.participants.map((p) => p.name.toUpperCase()).join(", "),
+  )
+  const gcObserverCount = createMemo(() => gc.observers.length)
+
   return (
     <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
       <text fg={theme.textMuted}>{directory()}</text>
+      <Show when={gc.active}>
+        <text fg={theme.text}>
+          <span style={{ fg: theme.textMuted }}>Group Chat: </span>
+          {gcParticipantNames()}
+          <Show when={gcObserverCount() > 0}>
+            <span style={{ fg: theme.textMuted }}>
+              {" "}(+{gcObserverCount()} observer{gcObserverCount() === 1 ? "" : "s"})
+            </span>
+          </Show>
+          <Show when={gc.budget !== null}>
+            <span style={{ fg: theme.textMuted }}>
+              {" "}| Budget: ${gc.budget!.spent.toFixed(2)}/${gc.budget!.limit.toFixed(2)}
+            </span>
+          </Show>
+        </text>
+      </Show>
       <box gap={2} flexDirection="row" flexShrink={0}>
         <Switch>
           <Match when={store.welcome}>
