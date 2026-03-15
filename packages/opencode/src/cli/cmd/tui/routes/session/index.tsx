@@ -84,6 +84,7 @@ import { useTuiConfig } from "../../context/tui-config"
 import { GroupchatProvider, useGroupchat } from "@tui/context/groupchat"
 import { loadCatalog, findCatalog } from "@/catalog"
 import { DialogGroupchat } from "../../component/dialog-groupchat"
+import { parseMentions, runRound, type RoundInput } from "@/groupchat"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1261,6 +1262,73 @@ export function Session() {
                 disabled={permissions().length > 0 || questions().length > 0}
                 onSubmit={() => {
                   toBottom()
+                }}
+                onBeforeSubmit={async (messageText, sessionID) => {
+                  if (!gc.active) return false
+
+                  const participantIds = gc.participants.map(p => p.id)
+                  const { mentioned } = parseMentions(messageText, participantIds)
+
+                  if (mentioned.length === 0) return false // No mentions, fall through to normal prompt
+
+                  // Run groupchat round instead of normal prompt
+                  const roundInput: RoundInput = {
+                    text: messageText,
+                    participants: gc.participants,
+                    observers: gc.observers,
+                    rounds: gc.rounds,
+                    contract: gc.contract,
+                    budget: gc.budget,
+                    semaphore: gc.semaphore,
+                    sessionID,
+                    dispatch: async (agentInfo, cleanedMessage, sid) => {
+                      const startTime = Date.now()
+                      try {
+                        // Use sdk.client.session.prompt() to send the agent's message
+                        // through the normal SDK pipeline, attributing it to the agent
+                        await sdk.client.session.prompt({
+                          sessionID: sid,
+                          agent: agentInfo.name,
+                          model: agentInfo.model,
+                          parts: [
+                            {
+                              id: `gc-${agentInfo.name}-${Date.now()}`,
+                              type: "text" as const,
+                              text: agentInfo.prompt
+                                ? `${agentInfo.prompt}\n\n${cleanedMessage}`
+                                : cleanedMessage,
+                            },
+                          ],
+                        })
+
+                        return {
+                          agent: agentInfo.name,
+                          content: `[${agentInfo.name} responded]`,
+                          tokensIn: 0,
+                          tokensOut: 0,
+                          cost: 0,
+                          duration: Date.now() - startTime,
+                        }
+                      } catch (err: any) {
+                        return {
+                          agent: agentInfo.name,
+                          content: "",
+                          tokensIn: 0,
+                          tokensOut: 0,
+                          cost: 0,
+                          duration: Date.now() - startTime,
+                          error: err?.message ?? "Unknown error",
+                        }
+                      }
+                    },
+                  }
+
+                  const { result, transcriptEntries } = await runRound(roundInput)
+                  for (const entry of transcriptEntries) {
+                    gc.addTranscript(entry)
+                  }
+                  gc.addRound(result)
+                  return true // Submission handled by groupchat
                 }}
                 sessionID={route.sessionID}
               />

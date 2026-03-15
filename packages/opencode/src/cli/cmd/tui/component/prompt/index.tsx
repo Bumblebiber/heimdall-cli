@@ -41,6 +41,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onBeforeSubmit?: (text: string, sessionID: string) => Promise<boolean>
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
@@ -586,6 +587,23 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
+
+    // Allow parent to intercept submission (e.g., for groupchat dispatch)
+    if (props.onBeforeSubmit) {
+      const handled = await props.onBeforeSubmit(inputText, sessionID)
+      if (handled) {
+        history.append({
+          ...store.prompt,
+          mode: currentMode,
+        })
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        props.onSubmit?.()
+        input.clear()
+        return
+      }
+    }
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
