@@ -81,6 +81,9 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { GroupchatProvider, useGroupchat } from "@tui/context/groupchat"
+import { loadCatalog, findCatalog } from "@/catalog"
+import { DialogGroupchat } from "../../component/dialog-groupchat"
 
 addDefaultParsers(parsers.parsers)
 
@@ -320,6 +323,55 @@ export function Session() {
   }
 
   const local = useLocal()
+  const gc = useGroupchat()
+
+  function openAgentPicker(dialog: DialogContext) {
+    if (gc.active) return // Prevent double groupchat
+    const catalogPath = findCatalog(process.cwd())
+    if (!catalogPath) return
+    const agents = loadCatalog(catalogPath)
+    dialog.replace(() => (
+      <DialogGroupchat
+        agents={agents}
+        onConfirm={(selected, observers) => gc.start(selected, observers)}
+      />
+    ))
+  }
+
+  function openInviteDialog(dialog: DialogContext) {
+    const catalogPath = findCatalog(process.cwd())
+    if (!catalogPath) return
+    const agents = loadCatalog(catalogPath)
+      .filter(a => !gc.participants.some(p => p.id === a.id))
+    dialog.replace(() => (
+      <DialogGroupchat
+        agents={agents}
+        onConfirm={(selected) => {
+          for (const agent of selected) gc.addParticipant(agent)
+        }}
+      />
+    ))
+  }
+
+  async function endGroupChat() {
+    const { formatTranscript: fmtTranscript } = await import("@/groupchat/transcript")
+    const { Hmem } = await import("@/hmem")
+    const { write } = await import("@/hmem/write")
+
+    const participantIds = gc.participants.map(p => p.id)
+    const totalDuration = gc.rounds.reduce((sum, r) => sum + r.duration, 0)
+    const formatted = fmtTranscript(gc.transcript, participantIds, gc.observers, totalDuration)
+
+    for (const id of [...participantIds, ...gc.observers]) {
+      try {
+        const store = await Hmem.openAgentStore(id)
+        write(store, "P", formatted, { tags: ["groupchat"] })
+      } catch (err) {
+        console.error(`[groupchat] Failed to save hmem for ${id}:`, err)
+      }
+    }
+    gc.end()
+  }
 
   function moveFirstChild() {
     if (children().length === 1) return
@@ -976,6 +1028,29 @@ export function Session() {
         dialog.clear()
       }),
     },
+    {
+      value: "groupchat",
+      title: "Start Group Chat",
+      category: "Session",
+      slash: { name: "groupchat" },
+      onSelect: (dialog) => openAgentPicker(dialog),
+    },
+    ...(gc.active ? [
+      {
+        value: "endchat",
+        title: "End Group Chat",
+        category: "Session",
+        slash: { name: "endchat" },
+        onSelect: () => endGroupChat(),
+      },
+      {
+        value: "invite",
+        title: "Invite Agent to Group Chat",
+        category: "Session",
+        slash: { name: "invite" },
+        onSelect: (dialog: DialogContext) => openInviteDialog(dialog),
+      },
+    ] : []),
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1029,6 +1104,7 @@ export function Session() {
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
+    <GroupchatProvider>
     <context.Provider
       value={{
         get width() {
@@ -1214,6 +1290,7 @@ export function Session() {
         </Show>
       </box>
     </context.Provider>
+    </GroupchatProvider>
   )
 }
 
@@ -1328,6 +1405,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
+  const gc = useGroupchat()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
 
   const final = createMemo(() => {
@@ -1346,6 +1424,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
+      <Show when={gc.active && props.message.agent}>
+        <text
+          fg={gc.participantColors[props.message.agent] ? RGBA.fromHex(gc.participantColors[props.message.agent]) : theme.text}
+          attributes={TextAttributes.BOLD}
+          paddingLeft={3}
+          marginTop={1}
+        >
+          {props.message.agent.toUpperCase()}
+        </text>
+      </Show>
       <For each={props.parts}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
