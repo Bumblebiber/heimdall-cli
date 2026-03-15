@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "./packages/heimdall-hmem/dist/index.js",
+    "./packages/heimdall-catalog/dist/index.js"
+  ],
+  "command": {
+    "catalog": {
+      "template": "List all available agents from the catalog using the catalog_list tool",
+      "description": "Show agent catalog"
+    },
+    "memory": {
+      "template": "Show memory statistics using the hmem_stats tool, then list recent memories",
+      "description": "Show memory overview"
+    }
+  }
+}
