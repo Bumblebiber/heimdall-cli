@@ -6,6 +6,7 @@ import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Sh
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
+import { useGroupchat } from "@tui/context/groupchat"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -77,6 +78,7 @@ export function Autocomplete(props: {
 }) {
   const sdk = useSDK()
   const sync = useSync()
+  const gc = useGroupchat()
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
@@ -332,6 +334,32 @@ export function Autocomplete(props: {
   })
 
   const agents = createMemo(() => {
+    if (gc.active) {
+      return [
+        {
+          display: "@All",
+          onSelect: () => {
+            insertPart("All", {
+              type: "agent",
+              name: "All",
+              source: { start: 0, end: 0, value: "" },
+            })
+          },
+        },
+        ...gc.participants.map(
+          (agent): AutocompleteOption => ({
+            display: "@" + agent.id,
+            onSelect: () => {
+              insertPart(agent.id, {
+                type: "agent",
+                name: agent.id,
+                source: { start: 0, end: 0, value: "" },
+              })
+            },
+          }),
+        ),
+      ]
+    }
     const agents = sync.data.agent
     return agents
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
