@@ -27,11 +27,15 @@ if (isBun) {
     }
   }
 } else {
-  // Node.js: use better-sqlite3
-  const mod = await import("better-sqlite3")
-  DatabaseConstructor = mod.default
+  // Node.js: use better-sqlite3 (dynamic require to prevent bundler resolution)
+  try {
+    const name = "better-sqlite3"
+    DatabaseConstructor = require(name)
+  } catch {
+    throw new Error("hmem requires bun:sqlite (Bun) or better-sqlite3 (Node.js). Neither is available.")
+  }
 }
 
 export default DatabaseConstructor as {
-  new (path: string): import("better-sqlite3").Database
+  new (path: string): any
 }
