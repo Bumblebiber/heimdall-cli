@@ -85,6 +85,7 @@ export namespace Agent {
           PermissionNext.fromConfig({
             question: "allow",
             plan_enter: "allow",
+            hmem_read_agent: "allow",
           }),
           user,
         ),
