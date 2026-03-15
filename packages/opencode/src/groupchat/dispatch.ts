@@ -1,9 +1,8 @@
 import { PermissionNext } from "../permission/next"
+import type { Config } from "../config/config"
 import type { CatalogAgent } from "../catalog"
 
-// Each toolset config is a flat Record<string, string> matching Config.Permission
-// when all values are strings. fromConfig() maps keys to permission names.
-const TOOLSET_CONFIGS: Record<string, Record<string, string>> = {
+const TOOLSET_CONFIGS: Record<string, Config.Permission> = {
   coder:      { "*": "allow" },
   researcher: { grep: "allow", glob: "allow", read: "allow", webfetch: "allow", list: "allow", "*": "deny" },
   reviewer:   { grep: "allow", glob: "allow", read: "allow", list: "allow", "*": "deny" },
