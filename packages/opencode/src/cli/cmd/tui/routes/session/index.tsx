@@ -120,6 +120,14 @@ function use() {
 }
 
 export function Session() {
+  return (
+    <GroupchatProvider>
+      <SessionInner />
+    </GroupchatProvider>
+  )
+}
+
+function SessionInner() {
   const route = useRouteData("session")
   const { navigate } = useRoute()
   const sync = useSync()
@@ -1106,7 +1114,6 @@ export function Session() {
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
-    <GroupchatProvider>
     <context.Provider
       value={{
         get width() {
@@ -1363,7 +1370,6 @@ export function Session() {
         </Show>
       </box>
     </context.Provider>
-    </GroupchatProvider>
   )
 }
 
