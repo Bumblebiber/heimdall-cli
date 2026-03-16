@@ -16,7 +16,8 @@
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
-    "db": "bun drizzle-kit"
+    "db": "bun drizzle-kit",
+    "postinstall": "bun run script/postinstall-sqlite.ts"
   },
   "bin": {
     "heimdall": "./bin/heimdall"
