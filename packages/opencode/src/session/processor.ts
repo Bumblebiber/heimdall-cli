@@ -42,8 +42,8 @@ async function logExchange(sessionID: SessionID, assistantMessage: MessageV2.Ass
     const store = await Hmem.openStore("build", Instance.directory)
     const id = store.getActiveO()
     const title = userText.split("\n")[0].replace(/[<>\[\]]/g, "").substring(0, 80)
-    const flat = userText.replace(/\n+/g, " | ").substring(0, 25_000)
-    const flatAgent = agentText.replace(/\n+/g, " | ").substring(0, 50_000)
+    const flat = userText.replace(/\n+/g, " | ")
+    const flatAgent = agentText.replace(/\n+/g, " | ")
     store.appendChildren(id, `${title}\n\t\t${flat}\n\t\t\t${flatAgent}`)
   } catch {
     // non-fatal: never block the session for memory logging
