@@ -16,6 +16,39 @@ import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
+import { Hmem } from "@/hmem"
+import { Instance } from "@/project/instance"
+
+/** Log user+assistant exchange to the active O-entry (non-blocking, fire-and-forget). */
+async function logExchange(sessionID: SessionID, assistantMessage: MessageV2.Assistant) {
+  try {
+    const msgs = await Session.messages({ sessionID })
+    const last = msgs.findLast((m) => m.role === "user")
+    if (!last) return
+    const parts = await MessageV2.parts(last.id)
+    const userText = parts
+      .filter((p): p is MessageV2.TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join("\n")
+    if (!userText || userText.length < 2) return
+
+    const agentParts = await MessageV2.parts(assistantMessage.id)
+    const agentText = agentParts
+      .filter((p): p is MessageV2.TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join("\n")
+    if (!agentText) return
+
+    const store = await Hmem.openStore("build", Instance.directory)
+    const id = store.getActiveO()
+    const title = userText.split("\n")[0].replace(/[<>\[\]]/g, "").substring(0, 80)
+    const flat = userText.replace(/\n+/g, " | ").substring(0, 25_000)
+    const flatAgent = agentText.replace(/\n+/g, " | ").substring(0, 50_000)
+    store.appendChildren(id, `${title}\n\t\t${flat}\n\t\t\t${flatAgent}`)
+  } catch {
+    // non-fatal: never block the session for memory logging
+  }
+}
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -418,6 +451,7 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          logExchange(input.sessionID, input.assistantMessage).catch(() => {})
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

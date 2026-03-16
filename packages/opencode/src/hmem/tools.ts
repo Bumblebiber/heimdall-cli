@@ -4,7 +4,7 @@ import { Hmem } from "./index"
 import { render } from "./render"
 import { Instance } from "../project/instance"
 
-export const VALID_PREFIXES = ["P", "L", "T", "E", "D", "M", "S", "N", "H", "R", "F"] as const
+export const VALID_PREFIXES = ["P", "L", "T", "E", "D", "M", "S", "N", "H", "R", "F", "O"] as const
 
 // ── hmem_search ───────────────────────────────────────────────────────────────
 
