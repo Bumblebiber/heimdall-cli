@@ -17,7 +17,21 @@ import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
 import { Hmem } from "@/hmem"
+import { write } from "@/hmem/write"
+import { append } from "@/hmem/modify"
+import { read } from "@/hmem/read"
 import { Instance } from "@/project/instance"
+
+/** Find or create the active O-entry for this session. */
+function getActiveO(store: Awaited<ReturnType<typeof Hmem.openStore>>): string {
+  const db = store.database
+  const row = db.prepare("SELECT id FROM memories WHERE prefix = 'O' AND active = 1 AND obsolete != 1 AND irrelevant != 1 LIMIT 1").get() as any
+  if (row) return row.id
+  const today = new Date().toISOString().substring(0, 10)
+  const result = write(store, "O", `Session ${today}`, { tags: ["#session"] })
+  db.prepare("UPDATE memories SET active = 1, updated_at = ? WHERE id = ?").run(new Date().toISOString(), result.id)
+  return result.id
+}
 
 /** Log user+assistant exchange to the active O-entry (non-blocking, fire-and-forget). */
 async function logExchange(sessionID: SessionID, assistantMessage: MessageV2.Assistant) {
@@ -40,11 +54,11 @@ async function logExchange(sessionID: SessionID, assistantMessage: MessageV2.Ass
     if (!agentText) return
 
     const store = await Hmem.openStore("build", Instance.directory)
-    const id = store.getActiveO()
+    const id = getActiveO(store)
     const title = userText.split("\n")[0].replace(/[<>\[\]]/g, "").substring(0, 80)
     const flat = userText.replace(/\n+/g, " | ")
     const flatAgent = agentText.replace(/\n+/g, " | ")
-    store.appendChildren(id, `${title}\n\t\t${flat}\n\t\t\t${flatAgent}`)
+    append(store, id, `${title}\n\t\t${flat}\n\t\t\t${flatAgent}`)
   } catch {
     // non-fatal: never block the session for memory logging
   }

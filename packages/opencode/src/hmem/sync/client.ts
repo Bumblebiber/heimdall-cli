@@ -14,17 +14,12 @@
  *   Merge: decrypt pulled blobs → upsert into local DB via SQLite
  */
 
-import { HmemStore } from "hmem-mcp"
+import type { Store } from "../store"
 import { deriveKey, encryptEntry, decryptEntry, hashId } from "./crypto"
 import type { SyncBlob, EncryptedBlob } from "./crypto"
 import { pushBlobs, pullBlobs } from "./transport"
 import { loadToken, loadState, saveState, getDbState, setDbState } from "./config"
 import type { SyncConfig } from "./config"
-
-/** Access the underlying better-sqlite3 Database from HmemStore. */
-function getDb(store: HmemStore): any {
-  return (store as any).db
-}
 
 // ---- Wire-format types ----
 
@@ -77,8 +72,8 @@ export class SyncClient {
 
   // ---- Reading entries from the local Store ----
 
-  private readEntries(store: HmemStore, since: string | null, syncSecrets: boolean): SyncEntry[] {
-    const db = getDb(store)
+  private readEntries(store: Store, since: string | null, syncSecrets: boolean): SyncEntry[] {
+    const db = store.database
     let sql = `
       SELECT m.*, GROUP_CONCAT(mt.tag) as tag_list
       FROM memories m
@@ -122,11 +117,11 @@ export class SyncClient {
     })
   }
 
-  private readNodes(store: HmemStore, rootId: string, syncSecrets: boolean): SyncNode[] {
+  private readNodes(store: Store, rootId: string, syncSecrets: boolean): SyncNode[] {
     let sql = "SELECT * FROM memory_nodes WHERE root_id = ?"
     if (!syncSecrets) sql += " AND (secret IS NULL OR secret = 0)"
     sql += " ORDER BY depth ASC, seq ASC"
-    const rows = getDb(store).prepare(sql).all(rootId) as any[]
+    const rows = store.database.prepare(sql).all(rootId) as any[]
     return rows.map((row) => ({
       id: row.id,
       parent_id: row.parent_id,
@@ -145,7 +140,7 @@ export class SyncClient {
 
   // ---- Encrypt / Decrypt ----
 
-  buildPushPayload(store: HmemStore, since: string | null, syncSecrets: boolean): SyncBlob[] {
+  buildPushPayload(store: Store, since: string | null, syncSecrets: boolean): SyncBlob[] {
     const entries = this.readEntries(store, since, syncSecrets)
     return entries.map((entry) => {
       const updatedAt = entry.updated_at ?? entry.created_at
@@ -157,7 +152,7 @@ export class SyncClient {
   }
 
   mergeBlob(
-    store: HmemStore,
+    store: Store,
     blob: { id_hash: string; blob: EncryptedBlob },
   ): "upserted" | "skipped" | "error" {
     try {
@@ -170,8 +165,8 @@ export class SyncClient {
 
   // ---- Upsert ----
 
-  private upsertEntry(store: HmemStore, payload: SyncEntry): "upserted" | "skipped" {
-    const db = getDb(store)
+  private upsertEntry(store: Store, payload: SyncEntry): "upserted" | "skipped" {
+    const db = store.database
     const existing = db
       .prepare("SELECT updated_at, created_at FROM memories WHERE id = ?")
       .get(payload.id) as { updated_at: string | null; created_at: string } | undefined
@@ -269,7 +264,7 @@ export interface SyncResult {
  * since last_pull_at. Updates state on completion.
  */
 export async function syncDatabase(
-  store: HmemStore,
+  store: Store,
   dbName: string,
   cfg: SyncConfig,
   passphrase: string,

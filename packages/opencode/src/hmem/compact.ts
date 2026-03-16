@@ -1,20 +1,7 @@
-import { HmemStore } from "hmem-mcp"
-import { VALID_PREFIXES } from "./tools"
-
-export interface CompactedTopic {
-  prefix: string
-  tags: string[]
-  l1: string
-  l2: string
-  l3: string
-  l4: string
-  l5: string
-}
-
-export interface CompactionResult {
-  summary: string
-  topics: CompactedTopic[]
-}
+import type { CompactedTopic, CompactionResult } from "./types"
+import type { Store } from "./store"
+import { VALID_PREFIXES } from "./types"
+import { write } from "./write"
 
 const HMEM_MARKER_START = "<!--hmem-topics"
 const HMEM_MARKER_END = "-->"
@@ -46,14 +33,15 @@ export function extractLearningsFromText(text: string): { cleaned: string; resul
  * Write extracted compaction topics to hmem as new entries.
  * Returns the IDs of written entries.
  */
-export function writeCompactedTopics(store: HmemStore, topics: CompactedTopic[]): string[] {
+export function writeCompactedTopics(store: Store, topics: CompactedTopic[]): string[] {
   const ids: string[] = []
   for (const topic of topics) {
     if (!topic.l1) continue // skip empty topics
     const content = topicToContent(topic)
-    const tags = topic.tags?.length > 0 ? topic.tags : undefined
     try {
-      const result = store.write(topic.prefix, content, undefined, undefined, undefined, tags)
+      const result = write(store, topic.prefix, content, {
+        tags: topic.tags?.length > 0 ? topic.tags : undefined,
+      })
       ids.push(result.id)
     } catch (err) {
       console.error(`[heimdall-hmem] Failed to write compacted topic: ${(err as Error).message}`)
