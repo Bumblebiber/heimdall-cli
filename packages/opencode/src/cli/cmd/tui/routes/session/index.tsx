@@ -52,6 +52,8 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import type { DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
+import { Logo } from "../../component/logo"
+import { Installation } from "@/installation"
 import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
 import { TodoItem } from "../../component/todo-item"
@@ -1146,6 +1148,10 @@ export function Session() {
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
+              <box paddingBottom={1} alignItems="center">
+                <Logo />
+                <text fg={theme.textMuted}>{Installation.VERSION}</text>
+              </box>
               <For each={messages()}>
                 {(message, index) => (
                   <Switch>
