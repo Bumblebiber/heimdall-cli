@@ -7,9 +7,21 @@ import { render } from "./render"
 import { assignBulkTags } from "./tags"
 import { Agent } from "../agent/agent"
 import { Global } from "../global"
+import { syncDatabase } from "./sync/client"
+import { loadConfig } from "./sync/config"
 
 // Map from store path -> Store instance (for lifecycle management)
 const openStores = new Map<string, Store>()
+
+/** Run sync (pull+push) for a store. Non-blocking, errors are swallowed. */
+async function trySync(store: Store, storePath: string): Promise<void> {
+  const cfg = loadConfig()
+  if (!cfg) return
+  const passphrase = process.env.HMEM_SYNC_PASSPHRASE
+  if (!passphrase) return
+  const name = path.basename(storePath, ".hmem")
+  await syncDatabase(store, name, cfg, passphrase)
+}
 
 async function getOrOpen(storePath: string): Promise<Store> {
   const existing = openStores.get(storePath)
@@ -76,6 +88,12 @@ export namespace Hmem {
 
       const store = await openStore(agentName, projectDir)
 
+      // Sync before reading (pull remote changes)
+      if (isPrimary) {
+        const storePath = await heimdallStorePath(projectDir)
+        await trySync(store, storePath).catch(() => {})
+      }
+
       if (isPrimary) {
         const entries = bulkReadV2(store, {})
         if (entries.length === 0) return ""
@@ -99,8 +117,12 @@ export namespace Hmem {
   /**
    * Closes all open stores (call on shutdown).
    */
-  export function closeAll(): void {
-    for (const store of openStores.values()) {
+  export async function closeAll(): Promise<void> {
+    // Push local changes before closing
+    for (const [storePath, store] of openStores.entries()) {
+      try {
+        await trySync(store, storePath)
+      } catch { /* non-fatal */ }
       try { store.close() } catch { /* non-fatal */ }
     }
     openStores.clear()
