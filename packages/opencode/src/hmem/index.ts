@@ -1,29 +1,47 @@
 import path from "path"
 import fs from "fs/promises"
-import { Store } from "./store"
-import { bulkReadV2 } from "./bulk-read"
-import { readL1Headers } from "./read"
+import { HmemStore } from "hmem-mcp"
+import type { MemoryEntry } from "hmem-mcp"
 import { render } from "./render"
-import { assignBulkTags } from "./tags"
 import { Agent } from "../agent/agent"
 import { Global } from "../global"
 
-// Map from store path -> Store instance (for lifecycle management)
-const openStores = new Map<string, Store>()
+class SessionCache {
+  private shown = new Map<string, number>()
 
-async function getOrOpen(storePath: string): Promise<Store> {
+  record(id: string): void {
+    this.shown.set(id, Date.now())
+  }
+
+  recordAll(ids: string[]): void {
+    const now = Date.now()
+    for (const id of ids) this.shown.set(id, now)
+  }
+
+  hiddenAndCachedSets(): { hiddenIds: Set<string>; cachedIds: Set<string> } {
+    const now = Date.now()
+    const hiddenIds = new Set<string>()
+    const cachedIds = new Set<string>()
+    for (const [id, ts] of this.shown) {
+      const age = now - ts
+      if (age < 5 * 60_000) hiddenIds.add(id)
+      else if (age < 30 * 60_000) cachedIds.add(id)
+    }
+    return { hiddenIds, cachedIds }
+  }
+}
+
+const openStores = new Map<string, { store: HmemStore; cache: SessionCache }>()
+
+function getOrOpen(storePath: string): { store: HmemStore; cache: SessionCache } {
   const existing = openStores.get(storePath)
   if (existing) return existing
-  const store = await Store.open(storePath)
-  openStores.set(storePath, store)
-  return store
+  const entry = { store: new HmemStore(storePath), cache: new SessionCache() }
+  openStores.set(storePath, entry)
+  return entry
 }
 
 export namespace Hmem {
-  /**
-   * Returns the store path for Heimdall's primary store.
-   * Checks projectDir/.heimdall/config.json for {"memory":"local"}, otherwise global.
-   */
   async function heimdallStorePath(projectDir?: string): Promise<string> {
     if (projectDir) {
       try {
@@ -40,76 +58,59 @@ export namespace Hmem {
     return path.join(Global.Path.data, "memory.hmem")
   }
 
-  /**
-   * Opens the correct store for the given agent name.
-   * - Primary agents (mode === "primary") → Heimdall's store
-   * - Subagents → agent-specific store at Global.Path.agents/{NAME}.hmem
-   */
-  export async function openStore(agentName: string, projectDir?: string): Promise<Store> {
+  export async function openStore(agentName: string, projectDir?: string): Promise<HmemStore> {
     const agentInfo = await Agent.get(agentName)
     if (agentInfo?.mode === "primary" || !agentInfo) {
       const storePath = await heimdallStorePath(projectDir)
-      return getOrOpen(storePath)
+      return getOrOpen(storePath).store
     }
-    // Subagent gets its own store (uppercase name)
     const storePath = path.join(Global.Path.agents, `${agentName.toUpperCase()}.hmem`)
-    return getOrOpen(storePath)
+    return getOrOpen(storePath).store
   }
 
-  /**
-   * Opens a specific agent's store by agent ID (uppercase).
-   */
-  export async function openAgentStore(agentId: string): Promise<Store> {
+  export async function openAgentStore(agentId: string): Promise<HmemStore> {
     const storePath = path.join(Global.Path.agents, `${agentId.toUpperCase()}.hmem`)
-    return getOrOpen(storePath)
+    return getOrOpen(storePath).store
   }
 
-  /**
-   * Returns the memory context string to inject into the system prompt.
-   * - Primary agents (Heimdall store): BulkRead V2 with full rendering
-   * - Subagents: last 50 L1 titles only
-   */
   export async function autoRecall(agentName: string, projectDir?: string): Promise<string> {
     try {
       const agentInfo = await Agent.get(agentName)
       const isPrimary = agentInfo?.mode === "primary" || !agentInfo
-
-      const store = await openStore(agentName, projectDir)
+      const storePath = isPrimary
+        ? await heimdallStorePath(projectDir)
+        : path.join(Global.Path.agents, `${agentName.toUpperCase()}.hmem`)
+      const { store, cache } = getOrOpen(storePath)
 
       if (isPrimary) {
-        const entries = bulkReadV2(store, {})
+        const { hiddenIds, cachedIds } = cache.hiddenAndCachedSets()
+        const entries = store.read({ mode: "discover", hiddenIds, cachedIds })
         if (entries.length === 0) return ""
-        assignBulkTags(store, entries)
-        const rendered = render(entries)
-        if (!rendered.trim()) return ""
-        return `<heimdall-memory>\n${rendered}\n</heimdall-memory>`
-      } else {
-        // Subagent: last 50 L1 headers only
-        const headers = readL1Headers(store).slice(0, 50)
-        if (headers.length === 0) return ""
-        const lines = headers.map((e) => `[${e.id}] ${e.level1}`).join("\n")
-        return `<agent-memory>\n${lines}\n</agent-memory>`
+        store.assignBulkTags(entries)
+        cache.recordAll(entries.map((e) => e.id))
+        return `<heimdall-memory>\n${render(entries)}\n</heimdall-memory>`
       }
+      // Subagent: last 50 L1 headers only
+      const headers = store.read({ titlesOnly: true }).slice(0, 50)
+      if (headers.length === 0) return ""
+      const lines = headers.map((e: MemoryEntry) => `[${e.id}] ${e.level_1}`).join("\n")
+      return `<agent-memory>\n${lines}\n</agent-memory>`
     } catch {
-      // Non-fatal: if memory store isn't available, return empty
       return ""
     }
   }
 
-  /**
-   * Closes all open stores (call on shutdown).
-   */
   export function closeAll(): void {
-    for (const store of openStores.values()) {
-      try { store.close() } catch { /* non-fatal */ }
+    for (const { store } of openStores.values()) {
+      try {
+        store.close()
+      } catch {
+        /* non-fatal */
+      }
     }
     openStores.clear()
   }
 
-  /**
-   * Returns true if the first-chat setup dialog is needed for this projectDir.
-   * Looks for the .heimdall/config.json in the project directory.
-   */
   export async function needsSetup(projectDir: string): Promise<boolean> {
     try {
       const cfgPath = path.join(projectDir, ".heimdall", "config.json")
@@ -120,13 +121,12 @@ export namespace Hmem {
     }
   }
 
-  /**
-   * Saves the user's memory scope choice ("local" | "global") for a project.
-   */
   export async function saveMemoryChoice(projectDir: string, choice: "local" | "global"): Promise<void> {
     const dir = path.join(projectDir, ".heimdall")
     await fs.mkdir(dir, { recursive: true })
-    const cfgPath = path.join(dir, "config.json")
-    await fs.writeFile(cfgPath, JSON.stringify({ memory: choice }, null, 2), "utf-8")
+    await fs.writeFile(path.join(dir, "config.json"), JSON.stringify({ memory: choice }, null, 2), "utf-8")
   }
 }
+
+export { HmemStore } from "hmem-mcp"
+export type { MemoryEntry, MemoryNode, ReadOptions, AgentRole } from "hmem-mcp"
