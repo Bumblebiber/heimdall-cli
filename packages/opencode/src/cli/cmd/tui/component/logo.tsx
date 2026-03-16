@@ -5,10 +5,11 @@ export function Logo() {
   const { theme } = useTheme()
 
   return (
-    <box alignItems="center">
+    <box alignItems="center" flexDirection="row">
       <text fg={theme.textMuted} attributes={TextAttributes.BOLD} selectable={false}>
-        ᚺ   ᛖ   ᛁ   ᛗ   ᛞ   ᚨ   ᛚ   ᛚ
-      </text>
+        ᚺ   ᛖ   ᛁ   ᛗ   </text>
+      <text fg={theme.text} attributes={TextAttributes.BOLD} selectable={false}>
+        ᛞ   ᚨ   ᛚ   ᛚ</text>
     </box>
   )
 }
