@@ -1,15 +1,10 @@
 import z from "zod"
 import { Tool } from "../tool/tool"
 import { Hmem } from "./index"
-import { read, readL1Headers } from "./read"
-import { write } from "./write"
-import { append, update } from "./modify"
-import { setTags, assignBulkTags } from "./tags"
-import { stats, healthCheck } from "./stats"
 import { render } from "./render"
 import { Instance } from "../project/instance"
 
-const VALID_PREFIXES = ["P", "L", "T", "E", "D", "M", "S", "N", "H", "R", "F"] as const
+export const VALID_PREFIXES = ["P", "L", "T", "E", "D", "M", "S", "N", "H", "R", "F"] as const
 
 // ── hmem_search ───────────────────────────────────────────────────────────────
 
@@ -21,8 +16,8 @@ export const HmemSearchTool = Tool.define("hmem_search", {
   }),
   async execute(params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const entries = read(store, { search: params.query, limit: params.limit ?? 20 })
-    assignBulkTags(store, entries)
+    const entries = store.read({ search: params.query, limit: params.limit ?? 20 })
+    store.assignBulkTags(entries)
     const output = entries.length === 0 ? "No results found." : render(entries)
     return {
       title: `search: ${params.query}`,
@@ -44,12 +39,12 @@ export const HmemReadTool = Tool.define("hmem_read", {
   }),
   async execute(params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const entries = read(store, {
+    const entries = store.read({
       id: params.id,
       prefix: params.prefix,
       limit: params.limit ?? 50,
     })
-    assignBulkTags(store, entries)
+    store.assignBulkTags(entries)
     const output = entries.length === 0 ? "No entries found." : render(entries)
     return {
       title: params.id ?? `read prefix=${params.prefix ?? "all"}`,
@@ -80,11 +75,7 @@ Valid prefix letters: P (project), L (learning), T (task), E (event), D (decisio
   }),
   async execute(params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const result = write(store, params.prefix, params.content, {
-      tags: params.tags,
-      favorite: params.favorite,
-      pinned: params.pinned,
-    })
+    const result = store.write(params.prefix, params.content, undefined, undefined, params.favorite, params.tags, params.pinned)
     return {
       title: `wrote ${result.id}`,
       metadata: { id: result.id, timestamp: result.timestamp },
@@ -105,7 +96,7 @@ export const HmemAppendTool = Tool.define("hmem_append", {
   }),
   async execute(params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const result = append(store, params.parent_id, params.content)
+    const result = store.appendChildren(params.parent_id, params.content)
     return {
       title: `appended to ${params.parent_id}`,
       metadata: { count: result.count, ids: result.ids },
@@ -124,11 +115,11 @@ export const HmemListTool = Tool.define("hmem_list", {
   }),
   async execute(params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const entries = readL1Headers(store, { prefix: params.prefix }).slice(0, params.limit ?? 100)
+    const entries = store.read({ titlesOnly: true, prefix: params.prefix }).slice(0, params.limit ?? 100)
     if (entries.length === 0) {
       return { title: "list", metadata: { count: 0 }, output: "No entries found." }
     }
-    const lines = entries.map((e) => `[${e.id}] ${e.level1}`).join("\n")
+    const lines = entries.map((e) => `[${e.id}] ${e.level_1}`).join("\n")
     return {
       title: `list (${entries.length})`,
       metadata: { count: entries.length },
@@ -147,7 +138,9 @@ export const HmemTagTool = Tool.define("hmem_tag", {
   }),
   async execute(params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    setTags(store, params.id, params.tags)
+    const existing = store.read({ id: params.id })
+    const content = existing.length > 0 ? existing[0].level_1 : ""
+    store.updateNode(params.id, content, undefined, undefined, undefined, undefined, undefined, params.tags)
     return {
       title: `tag ${params.id}`,
       metadata: { id: params.id, tags: params.tags },
@@ -163,7 +156,7 @@ export const HmemStatsTool = Tool.define("hmem_stats", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const result = stats(store)
+    const result = store.getStats()
     const lines = [
       `Total entries: ${result.total}`,
       `Total chars: ${result.totalChars}`,
@@ -185,7 +178,7 @@ export const HmemHealthTool = Tool.define("hmem_health", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const store = await Hmem.openStore(ctx.agent, Instance.directory)
-    const result = healthCheck(store)
+    const result = store.healthCheck()
     const lines = [
       `Broken links: ${result.brokenLinks.length}`,
       ...result.brokenLinks.map((l) => `  ${l}`),
@@ -216,8 +209,8 @@ export const HmemReadAgentTool = Tool.define("hmem_read_agent", {
   }),
   async execute(params, _ctx) {
     const store = await Hmem.openAgentStore(params.agent_name)
-    const entries = read(store, { limit: params.limit ?? 50 })
-    assignBulkTags(store, entries)
+    const entries = store.read({ limit: params.limit ?? 50 })
+    store.assignBulkTags(entries)
     const output = entries.length === 0 ? "No entries found." : render(entries)
     return {
       title: `read agent=${params.agent_name}`,

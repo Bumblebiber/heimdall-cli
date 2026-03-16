@@ -359,7 +359,6 @@ export function Session() {
   async function endGroupChat() {
     const { formatTranscript: fmtTranscript } = await import("@/groupchat/transcript")
     const { Hmem } = await import("@/hmem")
-    const { write } = await import("@/hmem/write")
 
     const participantIds = gc.participants.map(p => p.id)
     const totalDuration = gc.rounds.reduce((sum, r) => sum + r.duration, 0)
@@ -368,7 +367,7 @@ export function Session() {
     for (const id of [...participantIds, ...gc.observers]) {
       try {
         const store = await Hmem.openAgentStore(id)
-        write(store, "P", formatted, { tags: ["groupchat"] })
+        store.write("P", formatted, undefined, undefined, undefined, ["groupchat"])
       } catch (err) {
         console.error(`[groupchat] Failed to save hmem for ${id}:`, err)
       }
