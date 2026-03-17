@@ -40,11 +40,15 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
-    const p = pad ?? ""
+    const p = pad ?? "  "
     const dim = "\x1b[90m\x1b[1m"
     const bright = "\x1b[0m\x1b[1m"
     const reset = "\x1b[0m"
-    return `${p}${dim}ᚺ   ᛖ   ᛁ   ᛗ   ${bright}ᛞ   ᚨ   ᛚ   ᛚ${reset}`
+    return [
+      "",
+      `${p}${dim}ᚺ        ᛖ        ᛁ        ᛗ        ${bright}ᛞ        ᚨ        ᛚ        ᛚ${reset}`,
+      "",
+    ].join(EOL)
   }
 
   export async function input(prompt: string): Promise<string> {

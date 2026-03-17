@@ -258,10 +258,12 @@ function SessionInner() {
     const title = Locale.truncate(session()?.title ?? "", 50)
     const pad = (text: string) => text.padEnd(10, " ")
     const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
+    const logo = UI.logo("  ").split(/\r?\n/)
     return exit.message.set(
       [
-        ``,
-        `  ${UI.logo()}`,
+        `${logo[0] ?? ""}`,
+        `${logo[1] ?? ""}`,
+        `${logo[2] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
         `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}heimdall -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
@@ -1040,7 +1042,7 @@ function SessionInner() {
       value: "groupchat",
       title: "Start Group Chat",
       category: "Session",
-      slash: { name: "groupchat" },
+      slash: { name: "group", aliases: ["groupchat"] },
       onSelect: (dialog) => openAgentPicker(dialog),
     },
     ...(gc.active ? [
@@ -1274,6 +1276,11 @@ function SessionInner() {
                   toBottom()
                 }}
                 onBeforeSubmit={async (messageText, sessionID) => {
+                  const trimmed = messageText.trim()
+                  if (trimmed === "/group" || trimmed === "/groupchat") {
+                    openAgentPicker(dialog)
+                    return true
+                  }
                   if (!gc.active) return false
 
                   const participantIds = gc.participants.map(p => p.id)

@@ -8,6 +8,7 @@ import { assignBulkTags } from "./tags"
 import { Agent } from "../agent/agent"
 import { Global } from "../global"
 import { syncDatabase } from "./sync/client"
+import type { SyncResult } from "./sync/client"
 import { loadConfig } from "./sync/config"
 
 // Map from store path -> Store instance (for lifecycle management)
@@ -49,7 +50,7 @@ export namespace Hmem {
         // config not found or unreadable → use global
       }
     }
-    return path.join(Global.Path.data, "memory.hmem")
+    return path.join(Global.Path.data, "HEIMDALL.hmem")
   }
 
   /**
@@ -63,7 +64,7 @@ export namespace Hmem {
       const storePath = await heimdallStorePath(projectDir)
       return getOrOpen(storePath)
     }
-    // Subagent gets its own store (uppercase name)
+    // Subagent gets its own store — keyed by agent ID (uppercase)
     const storePath = path.join(Global.Path.agents, `${agentName.toUpperCase()}.hmem`)
     return getOrOpen(storePath)
   }
@@ -112,6 +113,21 @@ export namespace Hmem {
       // Non-fatal: if memory store isn't available, return empty
       return ""
     }
+  }
+
+  /**
+   * Manually triggers bidirectional sync for the primary store.
+   * Returns the SyncResult or null if sync is not configured.
+   */
+  export async function sync(agentName: string, projectDir?: string): Promise<SyncResult | null> {
+    const cfg = loadConfig()
+    if (!cfg) return null
+    const passphrase = process.env.HMEM_SYNC_PASSPHRASE
+    if (!passphrase) return null
+    const store = await openStore(agentName, projectDir)
+    const storePath = await heimdallStorePath(projectDir)
+    const name = path.basename(storePath, ".hmem")
+    return syncDatabase(store, name, cfg, passphrase)
   }
 
   /**

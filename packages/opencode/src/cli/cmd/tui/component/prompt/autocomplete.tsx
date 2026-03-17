@@ -593,7 +593,14 @@ export function Autocomplete(props: {
             return
           }
           if (name === "return") {
-            select()
+            if (options().length > 0) {
+              select()
+            } else if (store.visible === "/") {
+              // No matching slash command — close autocomplete, keep text, let submit propagate
+              command.keybinds(true)
+              setStore("visible", false)
+              return
+            }
             e.preventDefault()
             return
           }

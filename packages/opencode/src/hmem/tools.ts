@@ -227,6 +227,36 @@ export const HmemReadAgentTool = Tool.define("hmem_read_agent", {
   },
 })
 
+// ── hmem_sync ─────────────────────────────────────────────────────────────────
+
+export const HmemSyncTool = Tool.define("hmem_sync", {
+  description:
+    "Manually trigger a bidirectional sync with the hmem-sync server. Pushes local changes and pulls remote entries. Requires HMEM_SYNC_PASSPHRASE env var and sync config to be set up.",
+  parameters: z.object({}),
+  async execute(_params, ctx) {
+    const result = await Hmem.sync(ctx.agent, Instance.directory)
+    if (!result) {
+      return {
+        title: "sync: not configured",
+        metadata: {},
+        output: "Sync is not configured. Set HMEM_SYNC_PASSPHRASE and run hmem-sync setup first.",
+      }
+    }
+    const lines = [
+      `Pushed: ${result.pushed}`,
+      `Pulled: ${result.pulled}`,
+      `Upserted: ${result.upserted}`,
+      `Skipped: ${result.skipped}`,
+      `Errors: ${result.errors}`,
+    ]
+    return {
+      title: `sync: +${result.pushed} pushed, +${result.upserted} pulled`,
+      metadata: result,
+      output: lines.join("\n"),
+    }
+  },
+})
+
 // ── exported array ────────────────────────────────────────────────────────────
 
 export const HmemTools: Tool.Info[] = [
@@ -239,4 +269,5 @@ export const HmemTools: Tool.Info[] = [
   HmemStatsTool,
   HmemHealthTool,
   HmemReadAgentTool,
+  HmemSyncTool,
 ]

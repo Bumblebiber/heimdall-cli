@@ -18,7 +18,15 @@ export interface CatalogAgent {
 export function loadCatalog(catalogPath: string): CatalogAgent[] {
   try {
     const raw = fs.readFileSync(catalogPath, "utf8")
-    return JSON.parse(raw) as CatalogAgent[]
+    const parsed = JSON.parse(raw)
+    // v2 format: { _version, agents: { ID: spec } }
+    if (parsed && typeof parsed === "object" && parsed.agents && !Array.isArray(parsed)) {
+      return Object.entries(parsed.agents as Record<string, Omit<CatalogAgent, "id">>).map(
+        ([id, spec]) => ({ ...spec, id }),
+      )
+    }
+    // legacy format: CatalogAgent[]
+    return parsed as CatalogAgent[]
   } catch {
     return []
   }
