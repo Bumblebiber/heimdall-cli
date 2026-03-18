@@ -18,6 +18,9 @@ import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
+import { GroupchatProvider, useGroupchat } from "@tui/context/groupchat"
+import { findCatalog, loadCatalog } from "@/catalog"
+import { DialogGroupchat } from "@tui/component/dialog-groupchat"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
@@ -158,7 +161,9 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <App />
+                                              <GroupchatProvider>
+                                                <App />
+                                              </GroupchatProvider>
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
@@ -214,6 +219,35 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const gc = useGroupchat()
+
+  function openAgentPicker() {
+    if (gc.active) return
+    const cwd = sync.data.path.directory || process.cwd()
+    const catalogPath = findCatalog(cwd)
+    if (!catalogPath) {
+      toast.show({ message: "No catalog found. Create .heimdall/catalog.json or configs/catalog.json", variant: "error" })
+      return
+    }
+    const agents = loadCatalog(catalogPath)
+    dialog.replace(() => (
+      <DialogGroupchat
+        agents={agents}
+        onConfirm={(selected, observers) => {
+          gc.start(selected, observers)
+          dialog.clear()
+          // Auto-navigate to a new session so onBeforeSubmit handles routing
+          if (route.data.type !== "session") {
+            sdk.client.session.create({ directory: sync.data.path.directory || process.cwd() }).then((result) => {
+              if (result.data?.id) {
+                route.navigate({ type: "session", sessionID: result.data.id })
+              }
+            })
+          }
+        }}
+      />
+    ))
+  }
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -582,6 +616,13 @@ function App() {
         dialog.clear()
       },
       category: "System",
+    },
+    {
+      title: "Start Group Chat",
+      value: "groupchat",
+      category: "Session",
+      slash: { name: "group", aliases: ["groupchat"] },
+      onSelect: () => openAgentPicker(),
     },
     {
       title: "Exit the app",

@@ -83,10 +83,10 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
-import { GroupchatProvider, useGroupchat } from "@tui/context/groupchat"
-import { loadCatalog, findCatalog } from "@/catalog"
+import { useGroupchat } from "@tui/context/groupchat"
+import { loadCatalog, findCatalog, type CatalogAgent } from "@/catalog"
 import { DialogGroupchat } from "../../component/dialog-groupchat"
-import { parseMentions, runRound, type RoundInput } from "@/groupchat"
+import { parseMentions } from "@/groupchat"
 
 addDefaultParsers(parsers.parsers)
 
@@ -120,11 +120,7 @@ function use() {
 }
 
 export function Session() {
-  return (
-    <GroupchatProvider>
-      <SessionInner />
-    </GroupchatProvider>
-  )
+  return <SessionInner />
 }
 
 function SessionInner() {
@@ -336,9 +332,13 @@ function SessionInner() {
   const gc = useGroupchat()
 
   function openAgentPicker(dialog: DialogContext) {
-    if (gc.active) return // Prevent double groupchat
-    const catalogPath = findCatalog(process.cwd())
-    if (!catalogPath) return
+    if (gc.active) return
+    const cwd = sync.data.path.directory || process.cwd()
+    const catalogPath = findCatalog(cwd)
+    if (!catalogPath) {
+      toast.show({ message: "No catalog found. Create .heimdall/catalog.json or configs/catalog.json", variant: "error" })
+      return
+    }
     const agents = loadCatalog(catalogPath)
     dialog.replace(() => (
       <DialogGroupchat
@@ -349,8 +349,12 @@ function SessionInner() {
   }
 
   function openInviteDialog(dialog: DialogContext) {
-    const catalogPath = findCatalog(process.cwd())
-    if (!catalogPath) return
+    const cwd = sync.data.path.directory || process.cwd()
+    const catalogPath = findCatalog(cwd)
+    if (!catalogPath) {
+      toast.show({ message: "No catalog found. Create .heimdall/catalog.json or configs/catalog.json", variant: "error" })
+      return
+    }
     const agents = loadCatalog(catalogPath)
       .filter(a => !gc.participants.some(p => p.id === a.id))
     dialog.replace(() => (
@@ -1038,13 +1042,6 @@ function SessionInner() {
         dialog.clear()
       }),
     },
-    {
-      value: "groupchat",
-      title: "Start Group Chat",
-      category: "Session",
-      slash: { name: "group", aliases: ["groupchat"] },
-      onSelect: (dialog) => openAgentPicker(dialog),
-    },
     ...(gc.active ? [
       {
         value: "endchat",
@@ -1254,6 +1251,7 @@ function SessionInner() {
                 )}
               </For>
             </scrollbox>
+            <Footer />
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
                 <PermissionPrompt request={permissions()[0]} />
@@ -1286,66 +1284,27 @@ function SessionInner() {
                   const participantIds = gc.participants.map(p => p.id)
                   const { mentioned } = parseMentions(messageText, participantIds)
 
-                  if (mentioned.length === 0) return false // No mentions, fall through to normal prompt
+                  if (mentioned.length === 0) return false
 
-                  // Run groupchat round instead of normal prompt
-                  const roundInput: RoundInput = {
-                    text: messageText,
-                    participants: gc.participants,
-                    observers: gc.observers,
-                    rounds: gc.rounds,
-                    contract: gc.contract,
-                    budget: gc.budget,
-                    semaphore: gc.semaphore,
+                  const mentionedAgents = mentioned
+                    .map(id => gc.participants.find(p => p.id === id))
+                    .filter((a): a is CatalogAgent => a !== undefined)
+
+                  const systemPrompt = [
+                    "You are facilitating a group discussion. Respond AS EACH of the agents listed below, in order.",
+                    "Use this exact format for each: **[Agent Name]**: (their response in character, 2-4 sentences)",
+                    "",
+                    "Agents:",
+                    ...mentionedAgents.map(a => `- **${a.name}**: ${a.persona}`),
+                  ].join("\n")
+
+                  await sdk.client.session.prompt({
                     sessionID,
-                    dispatch: async (agentInfo, cleanedMessage, sid) => {
-                      const startTime = Date.now()
-                      try {
-                        // Use sdk.client.session.prompt() to send the agent's message
-                        // through the normal SDK pipeline, attributing it to the agent
-                        await sdk.client.session.prompt({
-                          sessionID: sid,
-                          agent: agentInfo.name,
-                          model: agentInfo.model,
-                          parts: [
-                            {
-                              id: `gc-${agentInfo.name}-${Date.now()}`,
-                              type: "text" as const,
-                              text: agentInfo.prompt
-                                ? `${agentInfo.prompt}\n\n${cleanedMessage}`
-                                : cleanedMessage,
-                            },
-                          ],
-                        })
+                    system: systemPrompt,
+                    parts: [{ type: "text", text: messageText }],
+                  })
 
-                        return {
-                          agent: agentInfo.name,
-                          content: `[${agentInfo.name} responded]`,
-                          tokensIn: 0,
-                          tokensOut: 0,
-                          cost: 0,
-                          duration: Date.now() - startTime,
-                        }
-                      } catch (err: any) {
-                        return {
-                          agent: agentInfo.name,
-                          content: "",
-                          tokensIn: 0,
-                          tokensOut: 0,
-                          cost: 0,
-                          duration: Date.now() - startTime,
-                          error: err?.message ?? "Unknown error",
-                        }
-                      }
-                    },
-                  }
-
-                  const { result, transcriptEntries } = await runRound(roundInput)
-                  for (const entry of transcriptEntries) {
-                    gc.addTranscript(entry)
-                  }
-                  gc.addRound(result)
-                  return true // Submission handled by groupchat
+                  return true
                 }}
                 sessionID={route.sessionID}
               />

@@ -15,7 +15,6 @@ import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
-import { GroupchatProvider } from "../context/groupchat"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -107,7 +106,7 @@ export function Home() {
   const keybind = useKeybind()
 
   return (
-    <GroupchatProvider>
+    <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
         <box height={2} minHeight={0} flexShrink={1} />
@@ -156,6 +155,6 @@ export function Home() {
           <text fg={theme.textMuted}>{Installation.VERSION}</text>
         </box>
       </box>
-    </GroupchatProvider>
+    </>
   )
 }

@@ -33,17 +33,23 @@ export function loadCatalog(catalogPath: string): CatalogAgent[] {
 }
 
 export function findCatalog(projectRoot: string): string | null {
-  const candidates = [
-    path.join(projectRoot, ".heimdall", "catalog.json"),
-    path.join(projectRoot, "configs", "catalog.json"),
-  ]
-  for (const candidate of candidates) {
-    try {
-      fs.accessSync(candidate)
-      return candidate
-    } catch {
-      continue
+  let dir = path.resolve(projectRoot)
+  while (true) {
+    const candidates = [
+      path.join(dir, ".heimdall", "catalog.json"),
+      path.join(dir, "configs", "catalog.json"),
+    ]
+    for (const candidate of candidates) {
+      try {
+        fs.accessSync(candidate)
+        return candidate
+      } catch {
+        continue
+      }
     }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
   return null
 }
