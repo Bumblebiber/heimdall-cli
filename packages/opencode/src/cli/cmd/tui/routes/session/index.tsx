@@ -379,7 +379,7 @@ function SessionInner() {
     for (const id of [...participantIds, ...gc.observers]) {
       try {
         const store = await Hmem.openAgentStore(id)
-        write(store, "P", formatted, { tags: ["groupchat"] })
+        write(store, "M", formatted, { tags: ["groupchat"] })
       } catch (err) {
         console.error(`[groupchat] Failed to save hmem for ${id}:`, err)
       }
@@ -1153,7 +1153,6 @@ function SessionInner() {
             >
               <box paddingBottom={1} alignItems="center">
                 <Logo />
-                <text fg={theme.textMuted}>{Installation.VERSION}</text>
               </box>
               <For each={messages()}>
                 {(message, index) => (
@@ -1298,7 +1297,7 @@ function SessionInner() {
                     ...mentionedAgents.map(a => `- **${a.name}**: ${a.persona}`),
                   ].join("\n")
 
-                  await sdk.client.session.prompt({
+                  sdk.client.session.prompt({
                     sessionID,
                     system: systemPrompt,
                     parts: [{ type: "text", text: messageText }],

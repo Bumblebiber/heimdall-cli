@@ -54,17 +54,21 @@ export const { use: useGroupchat, provider: GroupchatProvider } =
         get contract() { return store.contract },
 
         start(participants: CatalogAgent[], observers: string[]) {
+          // HEIMDALL always observes every groupchat
+          const isParticipant = participants.some(p => p.id === "HEIMDALL")
+          const isObserver = observers.includes("HEIMDALL")
+          const allObservers = isParticipant || isObserver ? observers : [...observers, "HEIMDALL"]
           const colors: Record<string, string> = {}
           for (const p of participants) {
             colors[p.id] = assignColor(colors)
           }
-          for (const o of observers) {
+          for (const o of allObservers) {
             colors[o] = assignColor(colors)
           }
           setStore({
             active: true,
             participants,
-            observers,
+            observers: allObservers,
             transcript: [],
             rounds: [],
             participantColors: colors,
